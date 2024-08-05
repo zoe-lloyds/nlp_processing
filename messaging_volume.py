@@ -51,7 +51,6 @@ summary_df = calculate_active_time_and_messages_per_day(df, person)
 print(summary_df)
 
 
-### New method
 import pandas as pd
 from datetime import timedelta
 
@@ -72,7 +71,7 @@ df = pd.DataFrame(data)
 # Convert timestamp to datetime
 df['Timestamp'] = pd.to_datetime(df['Timestamp'])
 
-def calculate_messages_and_active_time(df, person, working_hours_per_day=7):
+def calculate_messages_and_active_time(df, person, working_hours_per_day=7, max_inactive_period_minutes=15):
     # Filter messages by the person
     person_messages = df[df['From'] == person].copy()
     if person_messages.empty:
@@ -87,17 +86,26 @@ def calculate_messages_and_active_time(df, person, working_hours_per_day=7):
     # Replace NaT (first message) with 0
     person_messages['TimeDiff'] = person_messages['TimeDiff'].fillna(timedelta(0))
 
-    # Group by date and calculate total active time and message count
-    summary = person_messages.groupby(person_messages['Timestamp'].dt.date).agg(
+    # Identify active periods
+    person_messages['ActivePeriod'] = (person_messages['TimeDiff'] > timedelta(minutes=max_inactive_period_minutes)).cumsum()
+
+    # Calculate active time within each period
+    active_periods = person_messages.groupby(['Timestamp', 'ActivePeriod']).agg(
         TotalActiveTime=pd.NamedAgg(column='TimeDiff', aggfunc='sum'),
-        MessageCount=pd.NamedAgg(column='Message', aggfunc='size')
+        MessageCount=pd.NamedAgg(column='Text', aggfunc='size')
+    ).reset_index()
+
+    # Group by date and calculate total active time and message count per day
+    daily_summary = active_periods.groupby(active_periods['Timestamp'].dt.date).agg(
+        TotalActiveTime=pd.NamedAgg(column='TotalActiveTime', aggfunc='sum'),
+        MessageCount=pd.NamedAgg(column='MessageCount', aggfunc='sum')
     )
 
     # Calculate the proportion of the working day spent messaging
-    summary['WorkingDayHours'] = working_hours_per_day
-    summary['ProportionOfDayMessaging'] = summary['TotalActiveTime'] / timedelta(hours=working_hours_per_day)
+    daily_summary['WorkingDayHours'] = working_hours_per_day
+    daily_summary['ProportionOfDayMessaging'] = daily_summary['TotalActiveTime'] / timedelta(hours=working_hours_per_day)
     
-    return summary.reset_index().rename(columns={'index': 'Date'})
+    return daily_summary.reset_index().rename(columns={'index': 'Date'})
 
 # Example usage
 person = 'Alice'
