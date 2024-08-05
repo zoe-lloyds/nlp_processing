@@ -37,18 +37,14 @@ plt.show()
 
 # Heatmap of Active Periods
 # For the heatmap, create an hourly distribution of messages
-df['Hour'] = df['Timestamp'].dt.hour
-hourly_distribution = df[df['From'] == person].groupby('Hour').size()
+heatmap_data = pd.DataFrame(hourly_distribution.values.reshape(-1, 1), columns=['MessageCount'])
 
+# Plot the heatmap
 plt.figure(figsize=(10, 6))
-sns.heatmap(hourly_distribution.values.reshape(-1, 1), cmap='Blues', annot=True, cbar=False, yticklabels=range(24))
-# Turn off scientific notation on the colorbar
-ax.collections[0].colorbar.ax.yaxis.set_major_formatter(ScalarFormatter())
-
-# Adjust axis labels if necessary
-ax.xaxis.set_major_formatter(ScalarFormatter())
-ax.yaxis.set_major_formatter(ScalarFormatter())
-plt.ylabel('Hour of the Day')
-plt.xlabel('Activity')
+sns.heatmap(heatmap_data.T, cmap='Blues', annot=True, cbar=False, fmt='g', xticklabels=hourly_distribution.index, yticklabels=['Messages'])
+plt.xlabel('Hour of the Day')
+plt.ylabel('Activity')
+plt.title(f'Hourly Distribution of Messages for {person}')
+plt.show()
 plt.title(f'Hourly Distribution of Messages for {person}')
 plt.show()
