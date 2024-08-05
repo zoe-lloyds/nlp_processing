@@ -3,6 +3,8 @@ import seaborn as sns
 
 # Ensure the results are sorted by date
 summary_df = summary_df.sort_values(by='Timestamp')
+# Convert TotalActiveTime to hours
+summary_df['TotalActiveTime'] = summary_df['TotalActiveTime'].apply(lambda x: x.total_seconds() / 3600)
 
 # Bar Chart of Daily Message Count
 plt.figure(figsize=(10, 6))
@@ -40,6 +42,12 @@ hourly_distribution = df[df['From'] == person].groupby('Hour').size()
 
 plt.figure(figsize=(10, 6))
 sns.heatmap(hourly_distribution.values.reshape(-1, 1), cmap='Blues', annot=True, cbar=False, yticklabels=range(24))
+# Turn off scientific notation on the colorbar
+ax.collections[0].colorbar.ax.yaxis.set_major_formatter(ScalarFormatter())
+
+# Adjust axis labels if necessary
+ax.xaxis.set_major_formatter(ScalarFormatter())
+ax.yaxis.set_major_formatter(ScalarFormatter())
 plt.ylabel('Hour of the Day')
 plt.xlabel('Activity')
 plt.title(f'Hourly Distribution of Messages for {person}')
