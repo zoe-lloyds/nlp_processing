@@ -1,93 +1,140 @@
-Top2Vec is a powerful algorithm for topic modeling that automatically finds topics and also provides a way to visualize them. It uses word embeddings to find topics, which makes it different from traditional methods like LDA. Below is a step-by-step guide on how to use Top2Vec on your DataFrame and tokens.
 
-### 1. **Install the Top2Vec Library**
-   - First, you need to install the `top2vec` library if you haven't already.
+Sure! Clustering is a powerful technique used in conjunction with embeddings to discover natural groupings within your text data. When applied to topic modeling, clustering helps in identifying coherent topics based on the semantic similarity of documents.
 
-   ```bash
-   pip install top2vec
-   ```
+### Step-by-Step Guide to Clustering and Visualization
 
-### 2. **Prepare Your Data**
-   - If you already have a DataFrame `df` with a column `tokens` containing preprocessed tokens, you can proceed directly. If not, you should preprocess your text similarly to how it was done before.
+1. **Generate Document Embeddings:**
+   - Use pre-trained word embeddings (like Word2Vec, GloVe, BERT) to create embeddings for each document. These embeddings capture the semantic meaning of the text.
 
-### 3. **Using Top2Vec**
-   - You can now create a Top2Vec model using your text data.
+2. **Cluster the Document Embeddings:**
+   - Apply clustering algorithms like K-Means, DBSCAN, or HDBSCAN to group similar documents together based on their embeddings.
+   - Evaluate the optimal number of clusters using methods like the Elbow Method or Silhouette Score.
 
-```python
-from top2vec import Top2Vec
+3. **Visualize the Clusters:**
+   - Use dimensionality reduction techniques like PCA (Principal Component Analysis) or t-SNE (t-distributed Stochastic Neighbor Embedding) to reduce the embeddings to 2D or 3D for visualization.
+   - Plot the clusters and label them with the top keywords to understand the themes.
 
-# Assume df['tokens'] contains your preprocessed text tokens
-# If not already a list of strings, join tokens into strings
-df['text_joined'] = df['tokens'].apply(lambda x: ' '.join(x))
+4. **Interpret the Results:**
+   - Analyze the clusters by looking at the most representative keywords in each cluster.
+   - Fine-tune the number of clusters if necessary, to find the most meaningful grouping.
 
-# Fit the Top2Vec model
-model = Top2Vec(documents=df['text_joined'].tolist(), speed="learn", workers=4)
+### Implementation in Python
 
-# Display the number of topics found
-print(f"Number of topics: {model.get_num_topics()}")
-```
+Let's go through each step with code.
 
-### 4. **Exploring the Topics**
-   - After fitting the model, you can explore the topics found by Top2Vec.
+#### 1. Generate Document Embeddings
+
+Here we'll use a simple TF-IDF vectorizer, but you could replace it with more sophisticated embeddings (e.g., BERT, Sentence-BERT).
 
 ```python
-# Get the top 5 words for each topic
-topic_words, word_scores, topic_scores, topic_nums = model.get_topics()
+from sklearn.feature_extraction.text import TfidfVectorizer
+from sklearn.decomposition import PCA
+from sklearn.cluster import KMeans
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
 
-for i in range(len(topic_words)):
-    print(f"Topic {topic_nums[i]}: {', '.join(topic_words[i][:10])}")
+# Assuming df['text'] contains your documents
+tfidf_vectorizer = TfidfVectorizer(max_df=0.9, min_df=2, stop_words='english')
+tfidf_matrix = tfidf_vectorizer.fit_transform(df['text'])
+
+# Convert to dense matrix
+X = tfidf_matrix.todense()
 ```
 
-### 5. **Assign Topics to Documents**
-   - You can find the dominant topic for each document and assign it to your DataFrame.
+#### 2. Cluster the Document Embeddings
+
+Let's use K-Means clustering to cluster the documents. We will find the optimal number of clusters using the Elbow Method.
 
 ```python
-# Find the topic for each document
-document_topics, document_scores, document_topic_nums = model.get_documents_topics(df['text_joined'].tolist())
+from sklearn.metrics import silhouette_score
 
-# Add the topic numbers to the DataFrame
-df['dominant_topic'] = document_topic_nums
+# Determine the optimal number of clusters using the Elbow Method
+def find_optimal_clusters(data, max_k):
+    iters = range(2, max_k + 1)
+    sse = []
+    silhouette_scores = []
 
-# If you want to relabel topics based on interpretation:
-topic_labels = {
-    0: "Change/Improvement",
-    1: "Travel/Guidance",
-    2: "Clarity/Preparation"
-}
+    for k in iters:
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans.fit(data)
+        sse.append(kmeans.inertia_)
+        silhouette_scores.append(silhouette_score(data, kmeans.labels_))
+    
+    # Plot SSE (Elbow Method)
+    plt.figure(figsize=(10, 5))
+    plt.plot(iters, sse, marker='o')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('SSE')
+    plt.show()
+    
+    # Plot Silhouette Score
+    plt.figure(figsize=(10, 5))
+    plt.plot(iters, silhouette_scores, marker='o')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Silhouette Score')
+    plt.show()
 
-df['topic_label'] = df['dominant_topic'].map(topic_labels)
-
-# Display the DataFrame with topics and labels
-print(df[['text', 'dominant_topic', 'topic_label']])
+# Find optimal clusters
+find_optimal_clusters(X, 10)
 ```
 
-### 6. **Visualize the Topics**
-   - Top2Vec also provides a way to visualize the topics.
+#### 3. Apply K-Means with Optimal Clusters
+
+Let's assume the optimal number of clusters from the Elbow or Silhouette method is 5.
 
 ```python
-# Visualize topics
-model.visualize_topics()
+optimal_k = 5  # Replace with your chosen optimal number
+kmeans = KMeans(n_clusters=optimal_k, random_state=42)
+kmeans.fit(X)
+
+df['cluster'] = kmeans.labels_
 ```
 
-### 7. **Further Exploration**
-   - You can find similar documents, explore the nearest words to a given word, and more with Top2Vec.
+#### 4. Visualize the Clusters
+
+Use PCA to reduce dimensionality to 2D for visualization.
 
 ```python
-# Find documents similar to a specific topic
-similar_docs, similarity_scores = model.search_documents_by_topic(topic_num=0, num_docs=5)
+# Reduce dimensions for visualization
+pca = PCA(n_components=2)
+reduced_X = pca.fit_transform(X)
 
-for i, doc in enumerate(similar_docs):
-    print(f"Document {i+1}: {doc} (Score: {similarity_scores[i]})")
+plt.figure(figsize=(10, 7))
+sns.scatterplot(x=reduced_X[:, 0], y=reduced_X[:, 1], hue=df['cluster'], palette="Set1")
+plt.title("Cluster Visualization with PCA")
+plt.show()
 ```
 
-### Summary
+#### 5. Analyze and Interpret the Clusters
 
-This guide provides an overview of how to apply Top2Vec to your text data:
+To interpret each cluster, find the top terms in each cluster.
 
-1. **Installation:** Install Top2Vec.
-2. **Model Creation:** Fit the Top2Vec model on your text data.
-3. **Topic Exploration:** Extract and explore topics.
-4. **Document Assignment:** Assign topics to documents.
-5. **Visualization:** Optionally visualize the topics.
+```python
+# Get top keywords for each cluster
+def get_top_keywords(tfidf_matrix, clusters, top_n=10):
+    terms = tfidf_vectorizer.get_feature_names_out()
+    df_clusters = pd.DataFrame(tfidf_matrix.todense()).groupby(clusters).mean()
+    top_keywords = {}
+    for i, r in df_clusters.iterrows():
+        top_keywords[i] = [terms[t] for t in np.argsort(r)[-top_n:]]
+    return top_keywords
 
-Top2Vec is very flexible and generally provides high-quality, interpretable topics thanks to its use of word embeddings.
+top_keywords = get_top_keywords(tfidf_matrix, df['cluster'])
+for cluster, keywords in top_keywords.items():
+    print(f"Cluster {cluster}: {', '.join(keywords)}")
+```
+
+### Additional Tips:
+
+- **Fine-Tuning:** Adjust the `max_k` parameter in the `find_optimal_clusters` function and experiment with different numbers of clusters.
+- **Use Advanced Embeddings:** Replace TF-IDF with embeddings from models like BERT or Sentence-BERT for better semantic clustering.
+- **Silhouette Score:** If you want a single metric to decide on the number of clusters, choose the number of clusters with the highest silhouette score.
+
+### Summary:
+
+- **Clustering** documents based on embeddings helps in grouping semantically similar documents.
+- **Visualization** provides an intuitive understanding of how the documents are grouped.
+- **Interpretation** through top keywords per cluster allows for extracting meaningful topics.
+
+This process combines the power of clustering with the semantic richness of embeddings to create more meaningful and interpretable topics.
