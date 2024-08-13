@@ -138,3 +138,165 @@ for cluster, keywords in top_keywords.items():
 - **Interpretation** through top keywords per cluster allows for extracting meaningful topics.
 
 This process combines the power of clustering with the semantic richness of embeddings to create more meaningful and interpretable topics.
+
+Using pre-trained word embeddings to create document embeddings is an effective way to capture the semantic meaning of text. Since you have `distilBERT` (DistilBERT base uncased distilled squad), you can leverage this model to generate embeddings for each document.
+
+Here’s a step-by-step guide to create embeddings using DistilBERT and perform clustering:
+
+### 1. **Setup and Load DistilBERT**
+
+First, you need to install the necessary libraries and load the DistilBERT model.
+
+```bash
+pip install transformers
+pip install torch
+pip install sklearn
+```
+
+```python
+from transformers import DistilBertTokenizer, DistilBertModel
+import torch
+
+# Load DistilBERT tokenizer and model
+tokenizer = DistilBertTokenizer.from_pretrained('distilbert-base-uncased')
+model = DistilBertModel.from_pretrained('distilbert-base-uncased')
+```
+
+### 2. **Generate Embeddings for Each Document**
+
+To create embeddings for each document, follow these steps:
+
+1. **Tokenize and Encode the Text**
+2. **Obtain Embeddings from the Model**
+3. **Pool the Token Embeddings to Obtain a Single Document Vector**
+
+Here’s how to do it:
+
+```python
+import numpy as np
+
+def get_document_embedding(text, tokenizer, model):
+    # Tokenize and encode the text
+    inputs = tokenizer(text, return_tensors='pt', truncation=True, padding=True)
+    
+    # Get the token embeddings
+    with torch.no_grad():
+        outputs = model(**inputs)
+    
+    # Pooling strategy: Mean of token embeddings
+    embeddings = outputs.last_hidden_state
+    attention_mask = inputs['attention_mask']
+    mask_expanded = attention_mask.unsqueeze(-1).expand(embeddings.size())
+    sum_embeddings = torch.sum(embeddings * mask_expanded, 1)
+    mean_embeddings = sum_embeddings / torch.clamp(mask_expanded.sum(1), min=1e-9)
+    
+    return mean_embeddings.squeeze().numpy()
+
+# Example usage for a list of documents
+texts = ["The team is ready for the new project.", "We need to improve our strategies.", "The market is very volatile."]
+document_embeddings = np.array([get_document_embedding(text, tokenizer, model) for text in texts])
+```
+
+### 3. **Cluster the Document Embeddings**
+
+Once you have the embeddings, you can perform clustering as previously described. Here's how to use K-Means clustering:
+
+```python
+from sklearn.cluster import KMeans
+from sklearn.metrics import silhouette_score
+
+# Find optimal number of clusters
+def find_optimal_clusters(data, max_k):
+    iters = range(2, max_k + 1)
+    sse = []
+    silhouette_scores = []
+
+    for k in iters:
+        kmeans = KMeans(n_clusters=k, random_state=42)
+        kmeans.fit(data)
+        sse.append(kmeans.inertia_)
+        silhouette_scores.append(silhouette_score(data, kmeans.labels_))
+    
+    # Plot SSE (Elbow Method)
+    plt.figure(figsize=(10, 5))
+    plt.plot(iters, sse, marker='o')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('SSE')
+    plt.title('Elbow Method for Optimal k')
+    plt.show()
+    
+    # Plot Silhouette Score
+    plt.figure(figsize=(10, 5))
+    plt.plot(iters, silhouette_scores, marker='o')
+    plt.xlabel('Number of clusters')
+    plt.ylabel('Silhouette Score')
+    plt.title('Silhouette Score for Optimal k')
+    plt.show()
+
+# Find optimal clusters
+find_optimal_clusters(document_embeddings, 10)
+
+# Apply K-Means with chosen number of clusters
+optimal_k = 3  # Replace with your chosen number
+kmeans = KMeans(n_clusters=optimal_k, random_state=42)
+kmeans.fit(document_embeddings)
+
+# Assign topics to documents
+df = pd.DataFrame({'text': texts, 'cluster': kmeans.labels_})
+```
+
+### 4. **Visualize the Clusters**
+
+Use PCA to reduce the dimensionality of the embeddings for visualization.
+
+```python
+from sklearn.decomposition import PCA
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Reduce dimensions for visualization
+pca = PCA(n_components=2)
+reduced_embeddings = pca.fit_transform(document_embeddings)
+
+# Plot clusters
+plt.figure(figsize=(10, 7))
+sns.scatterplot(x=reduced_embeddings[:, 0], y=reduced_embeddings[:, 1], hue=df['cluster'], palette="Set1", s=100)
+plt.title("Cluster Visualization with PCA")
+plt.show()
+```
+
+### 5. **Interpret the Clusters**
+
+To understand the topics or themes of each cluster, you can look at the representative texts or use a method to extract key terms or concepts from the documents in each cluster.
+
+```python
+# Get top keywords for each cluster
+from sklearn.feature_extraction.text import TfidfVectorizer
+
+def get_top_keywords(texts, labels, n_words=10):
+    vectorizer = TfidfVectorizer(stop_words='english')
+    X = vectorizer.fit_transform(texts)
+    feature_names = np.array(vectorizer.get_feature_names_out())
+    
+    df_clusters = pd.DataFrame(X.todense()).groupby(labels).mean()
+    top_keywords = {}
+    
+    for i, row in df_clusters.iterrows():
+        top_terms = row.nlargest(n_words).index
+        top_keywords[i] = feature_names[top_terms]
+    
+    return top_keywords
+
+top_keywords = get_top_keywords(texts, df['cluster'])
+for cluster, keywords in top_keywords.items():
+    print(f"Cluster {cluster}: {', '.join(keywords)}")
+```
+
+### Summary
+
+1. **Generate Document Embeddings:** Use DistilBERT to encode each document into a vector representation.
+2. **Cluster the Embeddings:** Apply K-Means clustering to group similar documents.
+3. **Visualize the Results:** Use PCA to reduce dimensionality and plot the clusters.
+4. **Interpret the Clusters:** Extract key terms or concepts from each cluster to understand the topics.
+
+This process helps you capture semantic meanings of documents and identify meaningful clusters based on those embeddings.
