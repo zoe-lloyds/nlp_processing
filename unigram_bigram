@@ -1,0 +1,86 @@
+import gensim
+from gensim.models import Phrases
+from gensim.corpora import Dictionary
+from sklearn.decomposition import NMF
+from gensim.models.coherencemodel import CoherenceModel
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Sample documents (replace with your own corpus)
+documents = [
+    "apple banana orange fruit",
+    "dog cat pet animal",
+    "apple orange tropical fruit",
+    "dog wolf canine animal",
+    "banana orange yellow fruit",
+    "cat feline pet animal",
+    "apple banana smoothie fruit",
+    "wolf pack wild canine"
+]
+
+# Tokenize the documents into unigrams (words)
+tokenized_docs = [doc.split() for doc in documents]
+
+# Step 1: Create bigrams using Gensim's Phrases
+bigram_model = Phrases(tokenized_docs, min_count=1, threshold=1)
+bigram_docs = [bigram_model[doc] for doc in tokenized_docs]
+
+# Step 2: Combine unigrams and bigrams
+# Since bigrams are already included, bigram_docs will contain both unigrams and bigrams
+# Example: ['apple', 'banana', 'orange', 'fruit', 'apple_banana']
+
+# Step 3: Create a Gensim dictionary and corpus
+dictionary = Dictionary(bigram_docs)
+corpus = [dictionary.doc2bow(doc) for doc in bigram_docs]
+
+# Step 4: Filter extremes (optional)
+dictionary.filter_extremes(no_below=1, no_above=0.5)  # Keep words that appear in at least 1 document and no more than 50% of documents
+corpus = [dictionary.doc2bow(doc) for doc in bigram_docs]
+
+# Step 5: Convert corpus to document-term matrix
+from gensim.matutils import corpus2csc
+X = corpus2csc(corpus, num_terms=len(dictionary)).T  # Convert to sparse matrix format
+
+# Step 6: Apply NMF for topic modeling
+def calculate_coherence_score(num_topics, X, dictionary, bigram_docs):
+    nmf_model = NMF(n_components=num_topics, random_state=42)
+    W = nmf_model.fit_transform(X)  # Document-topic matrix
+    H = nmf_model.components_  # Topic-term matrix
+
+    # Get top words for each topic
+    num_top_words = 5
+    top_words_per_topic = []
+    for topic_idx, topic in enumerate(H):
+        top_word_indices = topic.argsort()[:-num_top_words-1:-1]
+        top_words = [dictionary.id2token[i] for i in top_word_indices]
+        top_words_per_topic.append(top_words)
+
+    # Calculate coherence score using Gensim's CoherenceModel
+    coherence_model = CoherenceModel(
+        topics=top_words_per_topic,
+        texts=bigram_docs,
+        dictionary=dictionary,
+        coherence='c_v'
+    )
+    coherence_score = coherence_model.get_coherence()
+    return coherence_score
+
+# Step 7: Loop through different numbers of topics and calculate coherence scores
+topic_range = range(2, 11)  # Test between 2 and 10 topics
+coherence_scores = []
+
+for num_topics in topic_range:
+    score = calculate_coherence_score(num_topics, X, dictionary, bigram_docs)
+    coherence_scores.append(score)
+    print(f"Number of Topics: {num_topics}, Coherence Score: {score}")
+
+# Find the optimal number of topics
+optimal_num_topics = topic_range[np.argmax(coherence_scores)]
+print(f"\nOptimal number of topics: {optimal_num_topics}")
+
+# Step 8: Plot coherence scores
+plt.plot(topic_range, coherence_scores, marker='o')
+plt.xlabel('Number of Topics')
+plt.ylabel('Coherence Score')
+plt.title('Coherence Score vs Number of Topics (Unigrams + Bigrams)')
+plt.show()
