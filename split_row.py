@@ -31,8 +31,10 @@ def extract_messages(row):
         # Clean message and strip unnecessary whitespaces
         message = message.strip()
         if message:
-            sender, msg = message.split(' ', 1)  # Split at first space
-            cleaned_messages.append((sender, msg.strip()))
+            parts = message.split(' ', 1)  # Split at first space
+            if len(parts) == 2:  # Ensure we have both sender and message
+                sender, msg = parts
+                cleaned_messages.append((sender.strip(), msg.strip()))
     
     return cleaned_messages
 
