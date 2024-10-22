@@ -1,100 +1,97 @@
 import pandas as pd
 import re
 
-# Function to clean each row
-def clean_row(row):
+# Sample DataFrame
+data = {'from': ['Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk)'],
+        'to': ['Williams, Megan (Fraud and Financial Crime -Commercial Banking Business Risk);Choudhary, Umair (Cardnet, GTB, Commercial Banking)'],
+        'timestamp': ['06/01/2020 14:16:57'],
+        'message': ['Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk) 12:06: no. Hello, how are you? I need to set Rupesh up with access to Cast (old and new) and Isnap - can you help me with that at all? And Cobra! ind Choudhary, Umair (Cardnet, GTB, Commercial Banking) 14:04: Hi Megan i think i have admin access ill give it a bash now']}
+df = pd.DataFrame(data)
+
+# Function to clean and split messages
+def clean_and_split_messages(row):
     message = row['message']
     
-    # Find all the timestamps in the message (e.g., HH:MM)
-    timestamps = re.findall(r'\d{2}:\d{2}', message)
-    
-    if len(timestamps) > 1:
-        # If there are multiple timestamps, split the message
-        split_message = re.split(r'\d{2}:\d{2}', message, maxsplit=1)
-        row['received'] = f"{row['received'].split()[0]} {timestamps[0]}"  # Keep the first timestamp
-        row['message'] = f"{split_message[0].strip()}.{split_message[1].strip()}"
-    
-    return row
+    # Check if the row already contains a single message
+    if len(re.findall(r'\w+,\s\w+\s\(.+?\)\s\d{2}:\d{2}:', message)) <= 1:
+        # No need to split, return the row as is
+        return pd.DataFrame([row])
 
-import pandas as pd
-import re
+    # Regular expression to find messages by name and timestamp pattern
+    message_parts = re.split(r'(\w+,\s\w+\s\(.+?\)\s\d{2}:\d{2}:)', message)
 
-# Function to clean each row
-def clean_row(row):
-    message = row['message']
-    
-    # Define the regex pattern to match the message part after the sender with the timestamp (e.g., "Williams, Megan (Description) HH:MM:")
-    pattern = r"([A-Za-z, ]+\([A-Za-z &-]+\) \d{2}:\d{2}:)"
-    
-    # Find all occurrences of this pattern in the message
-    matches = re.findall(pattern, message)
-    
-    if matches:
-        # We assume the first match is the main message timestamp, so we split the message after the first occurrence
-        split_message = re.split(pattern, message, maxsplit=1)
-        row['received'] = f"{row['received'].split()[0]} {split_message[1][-6:-1]}"  # Extracting the first timestamp
-        row['message'] = f"{split_message[2].strip()}"
-    
-    return row
-
-# Apply the cleaning function row-wise to your dataframe
-df_cleaned = df.apply(clean_row, axis=1)
-
-import ace_tools as tools; tools.display_dataframe_to_user(name="Cleaned DataFrame", dataframe=df_cleaned)
-
-import pandas as pd
-import re
-
-# Function to process each row and split into multiple rows if needed
-def split_messages(row):
-    # Define the regex pattern to match the message part after the sender with the timestamp
-    pattern = r"([A-Za-z, ]+\([A-Za-z &-]+\) \d{2}:\d{2}:)"
-    
-    # Find all matches of the pattern
-    matches = re.finditer(pattern, row['message'])
-    
+    # Clean the messages and prepare new rows
     new_rows = []
-    last_pos = 0
-    
-    # Iterate through the matches and split the message
-    for match in matches:
-        # Get the position of the current match
-        start_pos = match.start()
-        
-        if last_pos == 0:
-            # First message, update the current row
-            row['message'] = row['message'][last_pos:start_pos].strip()
-            row['received'] = f"{row['received'].split()[0]} {match.group()[-6:-1]}"  # Extract first timestamp
-            new_rows.append(row.copy())
+    current_sender = None
+    for part in message_parts:
+        # Identify if the part is a sender
+        if re.match(r'\w+,\s\w+\s\(.+?\)\s\d{2}:\d{2}:', part):
+            current_sender = part.strip()  # This will hold the sender and time
         else:
-            # For subsequent matches, create new rows
-            new_row = row.copy()
-            new_row['message'] = row['message'][last_pos:start_pos].strip()
-            new_row['received'] = f"{row['received'].split()[0]} {match.group()[-6:-1]}"  # Extract the timestamp
-            new_rows.append(new_row)
-        
-        last_pos = start_pos
-    
-    # Handle the last message after the last match
-    if last_pos < len(row['message']):
-        new_row = row.copy()
-        new_row['message'] = row['message'][last_pos:].strip()
-        new_rows.append(new_row)
-    
-    return new_rows
+            if current_sender:
+                # Clean and append the message
+                clean_message = part.strip().replace('\n', ' ').replace('  ', ' ')
+                timestamp = current_sender.split()[-1]
+                sender = current_sender.rsplit(' ', 1)[0]
+                
+                new_rows.append({'from': row['from'], 'to': row['to'], 'timestamp': timestamp, 'message': clean_message})
+                current_sender = None  # Reset sender for the next message
 
-# Apply the split function to each row and expand the rows
-def process_dataframe(df):
-    new_rows = []
-    for _, row in df.iterrows():
-        new_rows.extend(split_messages(row))
-    
-    # Create a new DataFrame from the list of new rows
     return pd.DataFrame(new_rows)
 
-# Example dataframe
-df_cleaned = process_dataframe(df)
+# Apply function to the DataFrame
+cleaned_messages = df.apply(clean_and_split_messages, axis=1)
 
-import ace_tools as tools; tools.display_dataframe_to_user(name="Cleaned DataFrame", dataframe=df_cleaned)
+# Concatenate all new rows into one DataFrame
+final_df = pd.concat(cleaned_messages.tolist(), ignore_index=True)
+
+import pandas as pd
+import re
+
+# Sample DataFrame
+data = {'from': ['Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk)'],
+        'to': ['Williams, Megan (Fraud and Financial Crime -Commercial Banking Business Risk);Choudhary, Umair (Cardnet, GTB, Commercial Banking)'],
+        'timestamp': ['06/01/2020 14:16:57'],
+        'message': ['Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk) 12:06: no. Hello, how are you? I need to set Rupesh up with access to Cast (old and new) and Isnap - can you help me with that at all? And Cobra! ind Choudhary, Umair (Cardnet, GTB, Commercial Banking) 14:04: Hi Megan i think i have admin access ill give it a bash now']}
+df = pd.DataFrame(data)
+
+# Function to clean and split messages
+def clean_and_split_messages(row):
+    message = row['message']
+    
+    # Regular expression to find name and timestamp patterns (e.g., "Name, Surname (Department) HH:MM:")
+    message_parts = re.split(r'(\w+,\s\w+\s\(.+?\)\s\d{2}:\d{2}:)', message)
+    
+    # If there's only one part, assume it's already clean
+    if len(message_parts) == 1:
+        return pd.DataFrame([row])  # Return row unchanged if no splitting is needed
+
+    # Clean the messages and prepare new rows
+    new_rows = []
+    current_sender = None
+    for part in message_parts:
+        # Identify if the part is a sender with timestamp
+        if re.match(r'\w+,\s\w+\s\(.+?\)\s\d{2}:\d{2}:', part):
+            current_sender = part.strip()  # This will hold the sender and time
+        else:
+            if current_sender:
+                # Clean the message, remove any trailing whitespace or newlines
+                clean_message = part.strip().replace('\n', ' ').replace('  ', ' ')
+                if clean_message:  # Only add rows with non-empty messages
+                    new_rows.append({
+                        'from': row['from'],
+                        'to': row['to'],
+                        'timestamp': current_sender.split()[-1],  # Extract timestamp
+                        'message': clean_message  # Only the clean message
+                    })
+                current_sender = None  # Reset sender for the next message
+
+    return pd.DataFrame(new_rows)
+
+# Apply function to the DataFrame
+cleaned_messages = df.apply(clean_and_split_messages, axis=1)
+
+# Concatenate all new rows into one DataFrame
+final_df = pd.concat(cleaned_messages.tolist(), ignore_index=True)
 
 
