@@ -16,17 +16,29 @@ def clean_row(row):
     
     return row
 
-# Example dataframe
-data = {
-    'from': ["Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk)"],
-    'to': ["Williams, Megan (Fraud and Financial Crime -Commercial Banking Business Risk);Choudhary, Umair (Cardnet, GTB, Commercial Banking)"],
-    'received': ["06/01/2020 14:16:57"],
-    'message': ["Williams, Megan (Fraud and Financial Crime - Commercial Banking Business Risk) 12:06: no Hello, how are you? I need to set Rupesh up with access to Cast (old and new) and Isnap - can you help me with that at all? And Cobra! ind Choudhary, Umair (Cardnet, GTB, Commercial Banking) 14:04: Hi Megan i think i have admin access ill give it a bash now"]
-}
+import pandas as pd
+import re
 
-df = pd.DataFrame(data)
+# Function to clean each row
+def clean_row(row):
+    message = row['message']
+    
+    # Define the regex pattern to match the message part after the sender with the timestamp (e.g., "Williams, Megan (Description) HH:MM:")
+    pattern = r"([A-Za-z, ]+\([A-Za-z &-]+\) \d{2}:\d{2}:)"
+    
+    # Find all occurrences of this pattern in the message
+    matches = re.findall(pattern, message)
+    
+    if matches:
+        # We assume the first match is the main message timestamp, so we split the message after the first occurrence
+        split_message = re.split(pattern, message, maxsplit=1)
+        row['received'] = f"{row['received'].split()[0]} {split_message[1][-6:-1]}"  # Extracting the first timestamp
+        row['message'] = f"{split_message[2].strip()}"
+    
+    return row
 
-# Apply the cleaning function row-wise
+# Apply the cleaning function row-wise to your dataframe
 df_cleaned = df.apply(clean_row, axis=1)
 
 import ace_tools as tools; tools.display_dataframe_to_user(name="Cleaned DataFrame", dataframe=df_cleaned)
+
